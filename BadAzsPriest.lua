@@ -1,7 +1,7 @@
 -- [[ [|cff355E3BB|r]adAzs |cffffffffPriest|r ]]
 -- Author:  ThePeregris
 -- Version: 1.0 (Self-Sufficient + 3 Graphic Panels: Holy / Discipline / Shadow)
--- Target:  Turtle WoW (1.12 / LUA 5.0)
+-- Target:  Vanilla/Classic WoW (1.12 / LUA 5.0)
 -- Requires: BadAzs Core (apenas utilitarios universais: ManualMouseover/Ready/GetMana/Vision/Sustain)
 --
 -- Referencias analisadas (design, nao codigo portado 1:1):
@@ -298,7 +298,7 @@ local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
         getglobal(this:GetName().."Text"):SetText(BadAzsP_L[BadAzsPriestDB.Locale].renewLabel .. ": " .. this:GetValue())
     end)
 
-    local shieldCheck = CreateFrame("CheckButton", nil, LeftPage, "UICheckButtonTemplate")
+    local shieldCheck = CreateFrame("CheckButton", "BadAzsP_"..specKey.."_ShieldCheck", LeftPage, "UICheckButtonTemplate")
     shieldCheck:SetPoint("TOPLEFT", 20, -170)
     getglobal(shieldCheck:GetName().."Text"):SetText("")
     local shieldLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")

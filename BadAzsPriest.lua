@@ -231,9 +231,9 @@ local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
     LeftPage:SetHeight(280)
     LeftPage:SetPoint("TOPLEFT", Panel, "TOPLEFT", 0, -60)
     LeftPage:SetBackdrop({
-        bgFile = "Interface/QuestFrame/QuestBG",
+        bgFile = "Interface/DialogFrame/UI-DialogBox-Background",
         edgeFile = "Interface/DialogFrame/UI-DialogBox-Border",
-        tile = false, edgeSize = 32,
+        tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 }
     })
 
@@ -242,9 +242,9 @@ local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
     RightPage:SetHeight(280)
     RightPage:SetPoint("TOPLEFT", Panel, "TOPLEFT", 320, -60)
     RightPage:SetBackdrop({
-        bgFile = "Interface/QuestFrame/QuestBG",
+        bgFile = "Interface/DialogFrame/UI-DialogBox-Background",
         edgeFile = "Interface/DialogFrame/UI-DialogBox-Border",
-        tile = false, edgeSize = 32,
+        tile = true, tileSize = 32, edgeSize = 32,
         insets = { left = 11, right = 12, top = 12, bottom = 11 }
     })
 

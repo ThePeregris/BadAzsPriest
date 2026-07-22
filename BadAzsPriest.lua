@@ -1,6 +1,6 @@
 -- [[ [|cff355E3BB|r]adAzs |cffffffffPriest|r ]]
 -- Author:  ThePeregris
--- Version: 1.0 (Self-Sufficient + 3 Graphic Panels: Holy / Discipline / Shadow)
+-- Version: 2.0 (QuickHeal-style rank engine + party/raid scan + /bapbuff)
 -- Target:  Vanilla/Classic WoW (1.12 / LUA 5.0)
 -- Requires: BadAzs Core (apenas utilitarios universais: ManualMouseover/Ready/GetMana/Vision/Sustain)
 --
@@ -9,7 +9,7 @@
 --   BadAzsPriest/QuickHeal -> conceito de escolher heal pela gravidade do dano + mana
 --   BadAzsPriest/BeneCast  -> conceito de smart-buff no mouseover com tecla modificadora
 
-local BadAzsPriestVersion = "|cffffffff[BadAzsPriest v1.0]|r"
+local BadAzsPriestVersion = "|cffffffff[BadAzsPriest v2.0]|r"
 
 -- ==========================================================
 -- LOCALIZACAO (EN padrao / PT alternativo)
@@ -27,15 +27,23 @@ local BadAzsP_L = {
         renewLabel    = "HP% - Renew (top off)",
         shieldLabel   = "Use Power Word: Shield first",
         buffLabel     = "ALT Buff (Smart Buff)",
+        minRankLabel  = "Min rank",
+        maxRankLabel  = "Max rank (0 = no limit)",
+        healBonusLabel = "Detected +Healing",
+        blacklistLabel = "Never-dispel list (comma separated)",
         explainFlash   = "Below this HP%, the target is in danger - Flash Heal is used for its fast cast time, even though it costs more mana per point healed.",
         explainGreater = "Below this HP% (but above the Flash Heal line), Greater Heal is used - slow cast, but the most mana-efficient big heal.",
         explainRenew   = "Below this HP% (but above both lines above), Renew is applied instead - a cheap heal-over-time to top the target off.",
         explainShield  = "If enabled, Power Word: Shield is cast first whenever the target lacks it and isn't under Weakened Soul, before any direct heal lands.",
-        explainBuff    = "Hold ALT and mouseover a party member (or yourself) to cast this buff on them. Click the button to cycle which buff is used.",
+        explainBuff    = "/bapbuff: buffs/dispels the party (or raid on ALT) automatically. Click here to pick which buff it casts on whoever is missing it.",
+        explainDownrank = "Limits which spell ranks Smart Heal is allowed to pick, no matter how small or big the deficit is. Useful to avoid a silly low rank in real content, or overspending mana while leveling.",
+        explainBlacklist = "Debuffs listed here are NEVER removed by /bapbuff or the offensive dispel, even if they're a valid Magic/Disease type. Type exact names, separated by commas, then press Enter.",
         cmdHeader     = "Macros",
         cmdList = {
-            "/bapheal - Smart Heal (mouseover, else target, else self)",
-            "Hold ALT - Cast the Buff below on mouseover",
+            "/bapheal - Smart Heal (party, or raid on ALT)",
+            "/bapbuff - Smart Buff/Dispel/Shield (party, or raid on ALT)",
+            "Hold CTRL on /bapbuff - Also Shield Rage users (Warriors)",
+            "Enemy targeted: /bapheal heals its target, /bapbuff dispels it",
             "/badazs priest holy - Open Holy panel",
             "/badazs priest disc - Open Discipline panel",
             "/badazs priest shadow - Open Shadow panel"
@@ -53,15 +61,23 @@ local BadAzsP_L = {
         renewLabel    = "HP% - Renew (completar)",
         shieldLabel   = "Usar Power Word: Shield primeiro",
         buffLabel     = "Buff no ALT (Smart Buff)",
+        minRankLabel  = "Rank minimo",
+        maxRankLabel  = "Rank maximo (0 = sem limite)",
+        healBonusLabel = "+Healing detectado",
+        blacklistLabel = "Lista de nunca-dispelar (separado por virgula)",
         explainFlash   = "Abaixo dessa porcentagem de HP, o alvo esta em perigo - Flash Heal e usado pelo cast rapido, mesmo custando mais mana por ponto curado.",
         explainGreater = "Abaixo dessa porcentagem (mas acima da linha do Flash Heal), Greater Heal e usado - cast lento, mas o heal grande mais eficiente em mana.",
         explainRenew   = "Abaixo dessa porcentagem (mas acima das duas linhas acima), Renew e aplicado - um heal ao longo do tempo barato pra completar o alvo.",
         explainShield  = "Se ativado, Power Word: Shield e lancado primeiro sempre que o alvo nao tiver o escudo e nao estiver com Weakened Soul, antes de qualquer heal direto.",
-        explainBuff    = "Segure ALT e passe o mouse num membro do grupo (ou em voce mesmo) pra lancar esse buff nele. Clique no botao pra ciclar qual buff e usado.",
+        explainBuff    = "/bapbuff: buffa/dispela a party (ou raid no ALT) automaticamente. Clique aqui pra escolher qual buff ele lanca em quem estiver sem.",
+        explainDownrank = "Limita quais ranks o Smart Heal pode escolher, nao importa o tamanho do deficit. Util pra evitar um rank ridiculo em conteudo serio, ou gastar mana demais enquanto levela.",
+        explainBlacklist = "Debuffs listados aqui NUNCA sao removidos pelo /bapbuff ou pelo dispel ofensivo, mesmo que sejam Magic/Disease de verdade. Digite os nomes exatos, separados por virgula, e aperte Enter.",
         cmdHeader     = "Macros",
         cmdList = {
-            "/bapheal - Smart Heal (mouseover, senao target, senao voce)",
-            "Segure ALT - Lanca o Buff abaixo no mouseover",
+            "/bapheal - Smart Heal (party, ou raid no ALT)",
+            "/bapbuff - Smart Buff/Dispel/Shield (party, ou raid no ALT)",
+            "Segure CTRL no /bapbuff - Tambem da Shield em quem tem Rage",
+            "Target inimigo: /bapheal cura o alvo dele, /bapbuff dispela ele",
             "/badazs priest holy - Abre o painel Holy",
             "/badazs priest disc - Abre o painel Discipline",
             "/badazs priest shadow - Abre o painel Shadow"
@@ -77,19 +93,100 @@ loadFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 loadFrame:SetScript("OnEvent", function()
     if not BadAzsPriestDB then BadAzsPriestDB = {} end
     if not BadAzsPriestDB.Locale then BadAzsPriestDB.Locale = "EN" end
+    if not BadAzsPriestDB.DispelBlacklist then BadAzsPriestDB.DispelBlacklist = {} end
 
     if not BadAzsPriestDB.holy then
-        BadAzsPriestDB.holy = { FlashHealBelow = 25, GreaterHealBelow = 55, RenewBelow = 90, UseShield = false, Buff = "Power Word: Fortitude", BuffIndex = 1 }
+        BadAzsPriestDB.holy = { FlashHealBelow = 25, GreaterHealBelow = 55, RenewBelow = 90, UseShield = false, Buff = "Power Word: Fortitude", BuffIndex = 1, MinRank = 1, MaxRank = 0 }
     end
     if not BadAzsPriestDB.disc then
-        BadAzsPriestDB.disc = { FlashHealBelow = 20, GreaterHealBelow = 45, RenewBelow = 90, UseShield = true, Buff = "Power Word: Shield", BuffIndex = 4 }
+        BadAzsPriestDB.disc = { FlashHealBelow = 20, GreaterHealBelow = 45, RenewBelow = 90, UseShield = true, Buff = "Power Word: Shield", BuffIndex = 4, MinRank = 1, MaxRank = 0 }
     end
     if not BadAzsPriestDB.shadow then
-        BadAzsPriestDB.shadow = { FlashHealBelow = 35, GreaterHealBelow = 60, RenewBelow = 90, UseShield = false, Buff = "Power Word: Fortitude", BuffIndex = 1 }
+        BadAzsPriestDB.shadow = { FlashHealBelow = 35, GreaterHealBelow = 60, RenewBelow = 90, UseShield = false, Buff = "Power Word: Fortitude", BuffIndex = 1, MinRank = 1, MaxRank = 0 }
+    end
+
+    -- Migracao: perfis salvos antes do motor de rank existir nao tem esses campos
+    local _, specKey
+    for _, specKey in ipairs({ "holy", "disc", "shadow" }) do
+        if not BadAzsPriestDB[specKey].MinRank then BadAzsPriestDB[specKey].MinRank = 1 end
+        if not BadAzsPriestDB[specKey].MaxRank then BadAzsPriestDB[specKey].MaxRank = 0 end
     end
 
     DEFAULT_CHAT_FRAME:AddMessage(BadAzsPriestVersion .. " " .. BadAzsP_L[BadAzsPriestDB.Locale].loaded)
 end)
+
+-- ==========================================================
+-- MOTOR DE HEAL: tabelas de rank + healneed (estilo QuickHeal)
+-- Valores de heal/mana por rank vindos direto do QuickHealPriest.lua
+-- (BasePriest/QuickHeal no repo de referencia) - nao inventados aqui.
+-- ==========================================================
+local RANKS_LesserHeal = { {heal=53,mana=0}, {heal=84,mana=45}, {heal=154,mana=75} }
+local RANKS_Heal = { {heal=330,mana=155}, {heal=476,mana=205}, {heal=624,mana=255}, {heal=667,mana=305} }
+local RANKS_GreaterHeal = { {heal=838,mana=351}, {heal=1066,mana=432}, {heal=1328,mana=517}, {heal=1632,mana=622}, {heal=1768,mana=674} }
+local RANKS_FlashHeal = { {heal=225,mana=125}, {heal=297,mana=155}, {heal=319,mana=185}, {heal=387,mana=215}, {heal=498,mana=265}, {heal=618,mana=315}, {heal=769,mana=380} }
+local RANKS_Renew = { {heal=45,mana=0}, {heal=100,mana=65}, {heal=175,mana=105}, {heal=245,mana=140}, {heal=270,mana=170}, {heal=340,mana=205}, {heal=435,mana=250}, {heal=555,mana=305}, {heal=690,mana=365}, {heal=825,mana=410} }
+
+CreateFrame("GameTooltip", "BadAzsPriest_TooltipScanner", nil, "GameTooltipTemplate")
+BadAzsPriest_TooltipScanner:SetOwner(WorldFrame, "ANCHOR_NONE")
+
+-- Soma o "+X Healing" de cada peca de equipamento, via tooltip-scan
+-- (nao existe API direta pra isso em Lua vanilla)
+local function BadAzsP_GetHealingBonus()
+    local bonus = 0
+    local slot
+    for slot = 1, 18 do
+        local link = GetInventoryItemLink("player", slot)
+        if link then
+            BadAzsPriest_TooltipScanner:ClearLines()
+            BadAzsPriest_TooltipScanner:SetInventoryItem("player", slot)
+            local i
+            for i = 1, 12 do
+                local region = getglobal("BadAzsPriest_TooltipScannerTextLeft"..i)
+                if region then
+                    local text = region:GetText()
+                    if text and string.find(text, "ealing") then
+                        local _, _, num = string.find(text, "(%d+)")
+                        if num then bonus = bonus + tonumber(num) end
+                    end
+                end
+            end
+        end
+    end
+    return bonus
+end
+
+-- Escolhe o rank MINIMO que cobre o healneed, respeitando mana disponivel
+-- e limites de downrank (minRank/maxRank, 0 = sem limite maximo)
+local function BadAzsP_PickRank(rankTable, healneed, manaLeft, healBonus, minRank, maxRank)
+    local n = table.getn(rankTable)
+    if not minRank or minRank < 1 then minRank = 1 end
+    if not maxRank or maxRank == 0 or maxRank > n then maxRank = n end
+
+    local chosen = nil
+    local i
+    for i = minRank, maxRank do
+        local r = rankTable[i]
+        if manaLeft >= r.mana then
+            chosen = i
+            if healneed <= (r.heal + healBonus) then break end
+        end
+    end
+    return chosen
+end
+
+-- Decide o TIPO de heal pelos sliders do perfil (igual antes) e o RANK pelo
+-- healneed real (novo - antes sempre castava rank maximo)
+local function BadAzsP_ChooseHealRank(healType, healneed, manaLeft, healBonus, profile)
+    local minRank, maxRank = profile.MinRank or 1, profile.MaxRank or 0
+    local table_ = RANKS_FlashHeal
+    if healType == "Greater Heal" then table_ = RANKS_GreaterHeal
+    elseif healType == "Renew" then table_ = RANKS_Renew
+    elseif healType == "Lesser Heal" then table_ = RANKS_LesserHeal end
+
+    local rank = BadAzsP_PickRank(table_, healneed, manaLeft, healBonus, minRank, maxRank)
+    if not rank then return nil end
+    return healType .. "(Rank " .. rank .. ")"
+end
 
 -- ==========================================================
 -- HELPERS (generico por unit - Core so cobre "player"/"target")
@@ -145,61 +242,268 @@ end
 -- Prioridade de unidade: mouseover (se amigavel) > target (se amigavel) > player
 -- Prioridade de spell: Shield (se habilitado) > Flash > Greater > Renew
 -- ==========================================================
-function BadAzsP_SmartHeal()
+-- Varre uma lista de units, retorna quem tem o MAIOR deficit de HP (mais ferido).
+-- Ignora quem ja esta morto ou fora de alcance de dados (sem HP valido).
+local function BadAzsP_FindMostWoundedIn(units)
+    local bestUnit, bestDeficit = nil, -1
+    local i
+    for i = 1, table.getn(units) do
+        local u = units[i]
+        if UnitExists(u) and not UnitIsDead(u) then
+            local hp, hmax = UnitHealth(u), UnitHealthMax(u)
+            if hmax and hmax > 0 then
+                local deficit = 100 - ((hp / hmax) * 100)
+                if deficit > bestDeficit then
+                    bestDeficit = deficit
+                    bestUnit = u
+                end
+            end
+        end
+    end
+    return bestUnit, bestDeficit
+end
+
+local BadAzsP_PartyUnits = { "player", "party1", "party2", "party3", "party4" }
+local BadAzsP_RaidUnits = { "player" }
+do
+    local i
+    for i = 1, 40 do table.insert(BadAzsP_RaidUnits, "raid"..i) end
+end
+
+-- useRaid = true varre a raid inteira, senao so a party
+local function BadAzsP_FindMostWounded(useRaid)
+    if useRaid then return BadAzsP_FindMostWoundedIn(BadAzsP_RaidUnits) end
+    return BadAzsP_FindMostWoundedIn(BadAzsP_PartyUnits)
+end
+
+function BadAzsP_SmartHeal(useRaid)
     if BadAzs_Sustain then BadAzs_Sustain() end
 
     local spec = BadAzsP_DetectSpec()
     local profile = BadAzsPriestDB[spec]
 
-    local unit = "player"
-    if UnitExists("mouseover") and UnitIsVisible("mouseover") and not UnitIsEnemy("player", "mouseover") then
-        unit = "mouseover"
-    elseif UnitExists("target") and UnitIsFriend("player", "target") then
-        unit = "target"
+    local unit, deficit
+
+    -- Target atual e inimigo: cura quem ELE esta atacando, nao varre grupo
+    if UnitExists("target") and UnitIsEnemy("player", "target") and UnitExists("targettarget") then
+        local hp, hmax = UnitHealth("targettarget"), UnitHealthMax("targettarget")
+        if hmax and hmax > 0 and not UnitIsDead("targettarget") then
+            unit = "targettarget"
+            deficit = 100 - ((hp / hmax) * 100)
+        end
     end
 
-    local hp, hmax = UnitHealth(unit), UnitHealthMax(unit)
-    if not hmax or hmax == 0 then return end
-    local pct = (hp / hmax) * 100
-    if pct >= 100 then return end
+    if not unit then
+        unit, deficit = BadAzsP_FindMostWounded(useRaid)
+    end
 
-    local spell = nil
+    if not unit or deficit <= 0 then return end -- ninguem precisa de cura
+
+    local pct = 100 - deficit
+    local hmax = UnitHealthMax(unit)
+    local healneed = hmax * (deficit / 100)
+    local manaLeft = UnitMana("player")
+    local healBonus = BadAzsP_GetHealingBonus()
+
+    local spellToCast = nil
 
     if profile.UseShield and pct <= 90
        and not BadAzsP_UnitHasBuff(unit, "PowerWordShield")
        and not BadAzsP_UnitHasDebuff(unit, "Ability_Priest_WeakenedSoul") then
-        spell = "Power Word: Shield"
+        spellToCast = "Power Word: Shield"
     elseif pct <= profile.FlashHealBelow then
-        spell = "Flash Heal"
+        spellToCast = BadAzsP_ChooseHealRank("Flash Heal", healneed, manaLeft, healBonus, profile)
     elseif pct <= profile.GreaterHealBelow then
-        spell = "Greater Heal"
+        spellToCast = BadAzsP_ChooseHealRank("Greater Heal", healneed, manaLeft, healBonus, profile)
     elseif pct <= profile.RenewBelow then
-        spell = "Renew"
+        spellToCast = BadAzsP_ChooseHealRank("Renew", healneed, manaLeft, healBonus, profile)
     end
 
-    if not spell then return end
+    if not spellToCast then return end -- tipo indicado mas sem rank que cubra a mana disponivel
 
-    if unit == "mouseover" then
-        BadAzs_ManualMouseover(spell, false)
-    elseif unit == "target" then
-        CastSpellByName(spell)
+    if unit == "player" then
+        CastSpellByName(spellToCast, 1)
     else
-        CastSpellByName(spell, 1)
+        -- troca de alvo, casta, volta pro alvo anterior
+        TargetUnit(unit)
+        CastSpellByName(spellToCast)
+        TargetLastTarget()
     end
 end
 
+-- ALT = mesma logica, varrendo a RAID em vez da party
 function BadAzsP_Heal()
-    if IsAltKeyDown() then
-        local spec = BadAzsP_DetectSpec()
-        local profile = BadAzsPriestDB[spec]
-        BadAzs_ManualMouseover(profile.Buff, false)
-        return
-    end
-    BadAzsP_SmartHeal()
+    BadAzsP_SmartHeal(IsAltKeyDown())
 end
 
 SLASH_BAPHEAL1 = "/bapheal"
 SlashCmdList["BAPHEAL"] = BadAzsP_Heal
+
+-- ==========================================================
+-- SMART BUFF / DISPEL / SHIELD (/bapbuff)
+-- ==========================================================
+
+-- Pega o NOME real de um buff/debuff via tooltip-scan (nao confiar em
+-- textura adivinhada - nomes de buff configuraveis pelo usuario no painel)
+local function BadAzsP_GetBuffName(unit, i)
+    BadAzsPriest_TooltipScanner:ClearLines()
+    BadAzsPriest_TooltipScanner:SetUnitBuff(unit, i)
+    local region = getglobal("BadAzsPriest_TooltipScannerTextLeft1")
+    return region and region:GetText() or nil
+end
+
+local function BadAzsP_GetDebuffName(unit, i)
+    BadAzsPriest_TooltipScanner:ClearLines()
+    BadAzsPriest_TooltipScanner:SetUnitDebuff(unit, i)
+    local region = getglobal("BadAzsPriest_TooltipScannerTextLeft1")
+    return region and region:GetText() or nil
+end
+
+local function BadAzsP_UnitHasBuffNamed(unit, spellName)
+    local i = 1
+    while UnitBuff(unit, i) do
+        if BadAzsP_GetBuffName(unit, i) == spellName then return true end
+        i = i + 1
+    end
+    return false
+end
+
+-- Primeiro debuff do unit que NAO esta na blacklist (nome, nao texture)
+local function BadAzsP_FirstDispellableDebuff(unit)
+    local i = 1
+    while UnitDebuff(unit, i) do
+        local name = BadAzsP_GetDebuffName(unit, i)
+        if name and not BadAzsP_IsDispelBlacklisted(name) then
+            return name
+        end
+        i = i + 1
+    end
+    return nil
+end
+
+-- Rage = recurso do Warrior. Shield reduz a geracao de rage deles (absorve
+-- o dano que geraria rage), entao por padrao NAO shieldamos Warriors, a
+-- menos que CTRL esteja segurado (override manual explicito).
+local function BadAzsP_UnitHasRage(unit)
+    local class = UnitClass(unit)
+    return class == "Warrior"
+end
+
+function BadAzsP_IsDispelBlacklisted(name)
+    local list = BadAzsPriestDB.DispelBlacklist
+    if not list then return false end
+    local i
+    for i = 1, table.getn(list) do
+        if list[i] == name then return true end
+    end
+    return false
+end
+
+-- Split/Join de string separada por virgula pra editar a blacklist via
+-- EditBox (Lua 5.0 nao tem string.gmatch, entao faz na mao com string.find)
+local function BadAzsP_SplitList(str)
+    local result = {}
+    local pos = 1
+    while true do
+        local commaPos = string.find(str, ",", pos, true)
+        local piece
+        if commaPos then
+            piece = string.sub(str, pos, commaPos - 1)
+            pos = commaPos + 1
+        else
+            piece = string.sub(str, pos)
+        end
+        local _, _, trimmed = string.find(piece, "^%s*(.-)%s*$")
+        if trimmed and trimmed ~= "" then
+            table.insert(result, trimmed)
+        end
+        if not commaPos then break end
+    end
+    return result
+end
+
+local function BadAzsP_JoinList(list)
+    local str = ""
+    local i
+    for i = 1, table.getn(list) do
+        if i > 1 then str = str .. ", " end
+        str = str .. list[i]
+    end
+    return str
+end
+
+local function BadAzsP_CastOn(unit, spell, extraOnSelf)
+    if unit == "player" then
+        CastSpellByName(spell, extraOnSelf and 1 or nil)
+    else
+        TargetUnit(unit)
+        CastSpellByName(spell)
+        TargetLastTarget()
+    end
+end
+
+function BadAzsP_SmartBuff(useRaid)
+    local spec = BadAzsP_DetectSpec()
+    local profile = BadAzsPriestDB[spec]
+
+    -- Target inimigo: dispel ofensivo (remove um buff magico do inimigo)
+    if UnitExists("target") and UnitIsEnemy("player", "target") then
+        CastSpellByName("Dispel Magic")
+        return
+    end
+
+    local units = useRaid and BadAzsP_RaidUnits or BadAzsP_PartyUnits
+    local i
+
+    -- 1) Dispel tem prioridade: primeiro que tiver debuff nao-blacklistado
+    -- NOTA v1: so tenta Dispel Magic (nao classificamos Disease separado
+    -- ainda - ver limitacoes no resumo). O jogo recusa sozinho se o debuff
+    -- nao for do tipo certo, entao isso e seguro de tentar.
+    for i = 1, table.getn(units) do
+        local u = units[i]
+        if UnitExists(u) and not UnitIsDead(u) then
+            local debuffName = BadAzsP_FirstDispellableDebuff(u)
+            if debuffName then
+                BadAzsP_CastOn(u, "Dispel Magic", true)
+                return
+            end
+        end
+    end
+
+    -- 2) Shield: quem nao tem, pulando quem usa Rage a menos que CTRL
+    if profile.UseShield then
+        for i = 1, table.getn(units) do
+            local u = units[i]
+            if UnitExists(u) and not UnitIsDead(u) then
+                local hasShield = BadAzsP_UnitHasBuff(u, "PowerWordShield")
+                local weakened = BadAzsP_UnitHasDebuff(u, "Ability_Priest_WeakenedSoul")
+                local skipRage = BadAzsP_UnitHasRage(u) and not IsControlKeyDown()
+                if not hasShield and not weakened and not skipRage then
+                    BadAzsP_CastOn(u, "Power Word: Shield", true)
+                    return
+                end
+            end
+        end
+    end
+
+    -- 3) Buff: quem nao tem o buff configurado no perfil ativo
+    for i = 1, table.getn(units) do
+        local u = units[i]
+        if UnitExists(u) and not UnitIsDead(u) then
+            if not BadAzsP_UnitHasBuffNamed(u, profile.Buff) then
+                BadAzsP_CastOn(u, profile.Buff, true)
+                return
+            end
+        end
+    end
+end
+
+function BadAzsP_BuffCmd()
+    BadAzsP_SmartBuff(IsAltKeyDown())
+end
+
+SLASH_BAPBUFF1 = "/bapbuff"
+SlashCmdList["BAPBUFF"] = BadAzsP_BuffCmd
 
 -- ==========================================================
 -- FABRICA DE PAINEL (formato de livro) - uma instancia por spec
@@ -216,7 +520,7 @@ end
 local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
     local Panel = CreateFrame("Frame", "BadAzsPriest_Panel_"..specKey, UIParent)
     Panel:SetWidth(620)
-    Panel:SetHeight(500)
+    Panel:SetHeight(650)
     Panel:SetPoint("CENTER", 0, 0)
     Panel:SetMovable(true)
     Panel:EnableMouse(true)
@@ -228,7 +532,7 @@ local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
 
     local LeftPage = CreateFrame("Frame", nil, Panel)
     LeftPage:SetWidth(300)
-    LeftPage:SetHeight(280)
+    LeftPage:SetHeight(430)
     LeftPage:SetPoint("TOPLEFT", Panel, "TOPLEFT", 0, -60)
     LeftPage:SetBackdrop({
         bgFile = "Interface/DialogFrame/UI-DialogBox-Background",
@@ -239,7 +543,7 @@ local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
 
     local RightPage = CreateFrame("Frame", nil, Panel)
     RightPage:SetWidth(300)
-    RightPage:SetHeight(280)
+    RightPage:SetHeight(430)
     RightPage:SetPoint("TOPLEFT", Panel, "TOPLEFT", 320, -60)
     RightPage:SetBackdrop({
         bgFile = "Interface/DialogFrame/UI-DialogBox-Background",
@@ -318,6 +622,49 @@ local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
     local buffLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     buffLabel:SetPoint("BOTTOM", buffBtn, "TOP", 0, 4)
 
+    local minRankSlider = CreateFrame("Slider", "BadAzsP_"..specKey.."_MinRankSlider", LeftPage, "OptionsSliderTemplate")
+    minRankSlider:SetPoint("TOP", 0, -250)
+    minRankSlider:SetWidth(240)
+    minRankSlider:SetMinMaxValues(1, 10)
+    minRankSlider:SetValueStep(1)
+    getglobal(minRankSlider:GetName().."Low"):SetText("1")
+    getglobal(minRankSlider:GetName().."High"):SetText("10")
+    minRankSlider:SetScript("OnValueChanged", function()
+        BadAzsPriestDB[specKey].MinRank = this:GetValue()
+        getglobal(this:GetName().."Text"):SetText(BadAzsP_L[BadAzsPriestDB.Locale].minRankLabel .. ": " .. this:GetValue())
+    end)
+
+    local maxRankSlider = CreateFrame("Slider", "BadAzsP_"..specKey.."_MaxRankSlider", LeftPage, "OptionsSliderTemplate")
+    maxRankSlider:SetPoint("TOP", 0, -294)
+    maxRankSlider:SetWidth(240)
+    maxRankSlider:SetMinMaxValues(0, 10)
+    maxRankSlider:SetValueStep(1)
+    getglobal(maxRankSlider:GetName().."Low"):SetText("0")
+    getglobal(maxRankSlider:GetName().."High"):SetText("10")
+    maxRankSlider:SetScript("OnValueChanged", function()
+        BadAzsPriestDB[specKey].MaxRank = this:GetValue()
+        getglobal(this:GetName().."Text"):SetText(BadAzsP_L[BadAzsPriestDB.Locale].maxRankLabel .. ": " .. this:GetValue())
+    end)
+
+    local healBonusLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    healBonusLabel:SetPoint("TOP", 0, -330)
+
+    local blacklistLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    blacklistLabel:SetPoint("TOP", 0, -354)
+    blacklistLabel:SetWidth(260)
+
+    local blacklistBox = CreateFrame("EditBox", "BadAzsP_"..specKey.."_BlacklistBox", LeftPage, "InputBoxTemplate")
+    blacklistBox:SetPoint("TOP", 0, -378)
+    blacklistBox:SetWidth(220)
+    blacklistBox:SetHeight(20)
+    blacklistBox:SetAutoFocus(false)
+    blacklistBox:SetScript("OnEnterPressed", function()
+        BadAzsPriestDB.DispelBlacklist = BadAzsP_SplitList(this:GetText())
+        this:ClearFocus()
+        BadAzsP_RefreshPanels()
+    end)
+    blacklistBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)
+
     -- ---- DIREITA: EXPLICACOES ----
     local explainFlash = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     explainFlash:SetPoint("TOP", 0, -14)
@@ -339,17 +686,25 @@ local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
     explainBuff:SetPoint("TOP", 0, -234)
     explainBuff:SetWidth(260); explainBuff:SetJustifyH("LEFT"); explainBuff:SetSpacing(2)
 
+    local explainDownrank = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    explainDownrank:SetPoint("TOP", 0, -278)
+    explainDownrank:SetWidth(260); explainDownrank:SetJustifyH("LEFT"); explainDownrank:SetSpacing(2)
+
+    local explainBlacklist = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    explainBlacklist:SetPoint("TOP", 0, -340)
+    explainBlacklist:SetWidth(260); explainBlacklist:SetJustifyH("LEFT"); explainBlacklist:SetSpacing(2)
+
     -- ---- RODAPE: COMANDOS ----
     local divider = Panel:CreateTexture(nil, "ARTWORK")
-    divider:SetPoint("TOP", 0, -348)
+    divider:SetPoint("TOP", 0, -478)
     divider:SetWidth(590); divider:SetHeight(1)
     divider:SetTexture(0.5, 0.5, 0.5, 0.5)
 
     local cmdHeader = Panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cmdHeader:SetPoint("TOP", 0, -360)
+    cmdHeader:SetPoint("TOP", 0, -490)
 
     local cmdText = Panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    cmdText:SetPoint("TOP", 0, -380)
+    cmdText:SetPoint("TOP", 0, -510)
     cmdText:SetWidth(560)
     cmdText:SetJustifyH("LEFT")
     cmdText:SetSpacing(3)
@@ -380,11 +735,23 @@ local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
         buffLabel:SetText("|cffffd200" .. L.buffLabel .. "|r")
         buffBtn:SetText(profile.Buff)
 
+        minRankSlider:SetValue(profile.MinRank or 1)
+        maxRankSlider:SetValue(profile.MaxRank or 0)
+        getglobal(minRankSlider:GetName().."Text"):SetText(L.minRankLabel .. ": " .. (profile.MinRank or 1))
+        getglobal(maxRankSlider:GetName().."Text"):SetText(L.maxRankLabel .. ": " .. (profile.MaxRank or 0))
+
+        healBonusLabel:SetText(L.healBonusLabel .. ": +" .. BadAzsP_GetHealingBonus())
+
+        blacklistLabel:SetText("|cffffd200" .. L.blacklistLabel .. "|r")
+        blacklistBox:SetText(BadAzsP_JoinList(BadAzsPriestDB.DispelBlacklist or {}))
+
         explainFlash:SetText(L.explainFlash)
         explainGreater:SetText(L.explainGreater)
         explainRenew:SetText(L.explainRenew)
         explainShield:SetText(L.explainShield)
         explainBuff:SetText(L.explainBuff)
+        explainDownrank:SetText(L.explainDownrank)
+        explainBlacklist:SetText(L.explainBlacklist)
 
         cmdHeader:SetText("|cffffd200" .. L.cmdHeader .. "|r")
         local lines = ""

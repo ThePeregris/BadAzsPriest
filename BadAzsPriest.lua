@@ -713,7 +713,7 @@ local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
         local L = BadAzsP_L[BadAzsPriestDB.Locale]
         local profile = BadAzsPriestDB[specKey]
 
-        title:SetText(accentColor .. L.title .. " - " .. L[specNameField] .. "|r")
+        title:SetText("|cffffffff" .. L.title .. "|r" .. accentColor .. " - " .. L[specNameField] .. "|r")
         langBtn:SetText(BadAzsPriestDB.Locale)
 
         local detected = BadAzsP_DetectSpec()

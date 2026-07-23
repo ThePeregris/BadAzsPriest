@@ -191,21 +191,35 @@ end
 -- ==========================================================
 -- HELPERS (generico por unit - Core so cobre "player"/"target")
 -- ==========================================================
-local function BadAzsP_UnitHasBuff(unit, texture)
+-- Pega o NOME real de um buff/debuff via tooltip-scan (mais confiavel que
+-- adivinhar fragmento de textura - usado pras checagens de Shield/Buff)
+local function BadAzsP_GetBuffName(unit, i)
+    BadAzsPriest_TooltipScanner:ClearLines()
+    BadAzsPriest_TooltipScanner:SetUnitBuff(unit, i)
+    local region = getglobal("BadAzsPriest_TooltipScannerTextLeft1")
+    return region and region:GetText() or nil
+end
+
+local function BadAzsP_GetDebuffName(unit, i)
+    BadAzsPriest_TooltipScanner:ClearLines()
+    BadAzsPriest_TooltipScanner:SetUnitDebuff(unit, i)
+    local region = getglobal("BadAzsPriest_TooltipScannerTextLeft1")
+    return region and region:GetText() or nil
+end
+
+local function BadAzsP_UnitHasBuffNamed(unit, spellName)
     local i = 1
     while UnitBuff(unit, i) do
-        local t = UnitBuff(unit, i)
-        if string.find(t, texture) then return true end
+        if BadAzsP_GetBuffName(unit, i) == spellName then return true end
         i = i + 1
     end
     return false
 end
 
-local function BadAzsP_UnitHasDebuff(unit, texture)
+local function BadAzsP_UnitHasDebuffNamed(unit, spellName)
     local i = 1
     while UnitDebuff(unit, i) do
-        local t = UnitDebuff(unit, i)
-        if string.find(t, texture) then return true end
+        if BadAzsP_GetDebuffName(unit, i) == spellName then return true end
         i = i + 1
     end
     return false
@@ -308,8 +322,8 @@ function BadAzsP_SmartHeal(useRaid)
     local spellToCast = nil
 
     if profile.UseShield and pct <= 90
-       and not BadAzsP_UnitHasBuff(unit, "PowerWordShield")
-       and not BadAzsP_UnitHasDebuff(unit, "Ability_Priest_WeakenedSoul") then
+       and not BadAzsP_UnitHasBuffNamed(unit, "Power Word: Shield")
+       and not BadAzsP_UnitHasDebuffNamed(unit, "Weakened Soul") then
         spellToCast = "Power Word: Shield"
     elseif pct <= profile.FlashHealBelow then
         spellToCast = BadAzsP_ChooseHealRank("Flash Heal", healneed, manaLeft, healBonus, profile)
@@ -342,31 +356,6 @@ SlashCmdList["BAPHEAL"] = BadAzsP_Heal
 -- ==========================================================
 -- SMART BUFF / DISPEL / SHIELD (/bapbuff)
 -- ==========================================================
-
--- Pega o NOME real de um buff/debuff via tooltip-scan (nao confiar em
--- textura adivinhada - nomes de buff configuraveis pelo usuario no painel)
-local function BadAzsP_GetBuffName(unit, i)
-    BadAzsPriest_TooltipScanner:ClearLines()
-    BadAzsPriest_TooltipScanner:SetUnitBuff(unit, i)
-    local region = getglobal("BadAzsPriest_TooltipScannerTextLeft1")
-    return region and region:GetText() or nil
-end
-
-local function BadAzsP_GetDebuffName(unit, i)
-    BadAzsPriest_TooltipScanner:ClearLines()
-    BadAzsPriest_TooltipScanner:SetUnitDebuff(unit, i)
-    local region = getglobal("BadAzsPriest_TooltipScannerTextLeft1")
-    return region and region:GetText() or nil
-end
-
-local function BadAzsP_UnitHasBuffNamed(unit, spellName)
-    local i = 1
-    while UnitBuff(unit, i) do
-        if BadAzsP_GetBuffName(unit, i) == spellName then return true end
-        i = i + 1
-    end
-    return false
-end
 
 -- Primeiro debuff do unit que NAO esta na blacklist (nome, nao texture)
 local function BadAzsP_FirstDispellableDebuff(unit)
@@ -475,8 +464,8 @@ function BadAzsP_SmartBuff(useRaid)
         for i = 1, table.getn(units) do
             local u = units[i]
             if UnitExists(u) and not UnitIsDead(u) then
-                local hasShield = BadAzsP_UnitHasBuff(u, "PowerWordShield")
-                local weakened = BadAzsP_UnitHasDebuff(u, "Ability_Priest_WeakenedSoul")
+                local hasShield = BadAzsP_UnitHasBuffNamed(u, "Power Word: Shield")
+                local weakened = BadAzsP_UnitHasDebuffNamed(u, "Weakened Soul")
                 local skipRage = BadAzsP_UnitHasRage(u) and not IsControlKeyDown()
                 if not hasShield and not weakened and not skipRage then
                     BadAzsP_CastOn(u, "Power Word: Shield", true)

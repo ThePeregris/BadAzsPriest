@@ -26,7 +26,10 @@ local BadAzsP_L = {
         greaterLabel  = "HP% - Greater Heal (big deficit)",
         renewLabel    = "HP% - Renew (top off)",
         shieldLabel   = "Use Power Word: Shield first",
-        buffLabel     = "ALT Buff (Smart Buff)",
+        buffLabel     = "Buffs to monitor",
+        fortLabel     = "Power Word: Fortitude",
+        spiritLabel   = "Divine Spirit",
+        shadowProtLabel = "Shadow Protection",
         minRankLabel  = "Min rank",
         maxRankLabel  = "Max rank (0 = no limit)",
         healBonusLabel = "Detected +Healing",
@@ -35,7 +38,7 @@ local BadAzsP_L = {
         explainGreater = "Below this HP% (but above the Flash Heal line), Greater Heal is used - slow cast, but the most mana-efficient big heal.",
         explainRenew   = "Below this HP% (but above both lines above), Renew is applied instead - a cheap heal-over-time to top the target off.",
         explainShield  = "If enabled, Power Word: Shield is cast first whenever the target lacks it and isn't under Weakened Soul, before any direct heal lands.",
-        explainBuff    = "/bapbuff: buffs/dispels the party (or raid on ALT) automatically. Click here to pick which buff it casts on whoever is missing it.",
+        explainBuff    = "Each buff below is applied automatically to whoever in the party (or raid on ALT) is missing it. Shield follows the same list, but skips Rage users (Warriors) unless CTRL is held.",
         explainDownrank = "Limits which spell ranks Smart Heal is allowed to pick, no matter how small or big the deficit is. Useful to avoid a silly low rank in real content, or overspending mana while leveling.",
         explainBlacklist = "Debuffs listed here are NEVER removed by /bapbuff or the offensive dispel, even if they're a valid Magic/Disease type. Type exact names, separated by commas, then press Enter.",
         cmdHeader     = "Macros",
@@ -49,7 +52,7 @@ local BadAzsP_L = {
             "/badazs priest shadow - Open Shadow panel"
         }
     },
-    PT = {
+    BR = {
         loaded        = "Carregado. Digite /badazs priest holy|disc|shadow para configurar.",
         title         = "BadAzs Priest",
         specHoly      = "Holy",
@@ -60,7 +63,10 @@ local BadAzsP_L = {
         greaterLabel  = "HP% - Greater Heal (deficit grande)",
         renewLabel    = "HP% - Renew (completar)",
         shieldLabel   = "Usar Power Word: Shield primeiro",
-        buffLabel     = "Buff no ALT (Smart Buff)",
+        buffLabel     = "Buffs monitorados",
+        fortLabel     = "Power Word: Fortitude",
+        spiritLabel   = "Divine Spirit",
+        shadowProtLabel = "Shadow Protection",
         minRankLabel  = "Rank minimo",
         maxRankLabel  = "Rank maximo (0 = sem limite)",
         healBonusLabel = "+Healing detectado",
@@ -69,7 +75,7 @@ local BadAzsP_L = {
         explainGreater = "Abaixo dessa porcentagem (mas acima da linha do Flash Heal), Greater Heal e usado - cast lento, mas o heal grande mais eficiente em mana.",
         explainRenew   = "Abaixo dessa porcentagem (mas acima das duas linhas acima), Renew e aplicado - um heal ao longo do tempo barato pra completar o alvo.",
         explainShield  = "Se ativado, Power Word: Shield e lancado primeiro sempre que o alvo nao tiver o escudo e nao estiver com Weakened Soul, antes de qualquer heal direto.",
-        explainBuff    = "/bapbuff: buffa/dispela a party (ou raid no ALT) automaticamente. Clique aqui pra escolher qual buff ele lanca em quem estiver sem.",
+        explainBuff    = "Cada buff abaixo e aplicado automaticamente em quem na party (ou raid no ALT) estiver sem. Shield entra na mesma lista, mas pula quem usa Rage (Warriors) a menos que CTRL esteja segurado.",
         explainDownrank = "Limita quais ranks o Smart Heal pode escolher, nao importa o tamanho do deficit. Util pra evitar um rank ridiculo em conteudo serio, ou gastar mana demais enquanto levela.",
         explainBlacklist = "Debuffs listados aqui NUNCA sao removidos pelo /bapbuff ou pelo dispel ofensivo, mesmo que sejam Magic/Disease de verdade. Digite os nomes exatos, separados por virgula, e aperte Enter.",
         cmdHeader     = "Macros",
@@ -96,20 +102,26 @@ loadFrame:SetScript("OnEvent", function()
     if not BadAzsPriestDB.DispelBlacklist then BadAzsPriestDB.DispelBlacklist = {} end
 
     if not BadAzsPriestDB.holy then
-        BadAzsPriestDB.holy = { FlashHealBelow = 25, GreaterHealBelow = 55, RenewBelow = 90, UseShield = false, Buff = "Power Word: Fortitude", BuffIndex = 1, MinRank = 1, MaxRank = 0 }
+        BadAzsPriestDB.holy = { FlashHealBelow = 25, GreaterHealBelow = 55, RenewBelow = 90, UseShield = false, MonitorFortitude = true, MonitorSpirit = true, MonitorShadowProt = false, MinRank = 1, MaxRank = 0 }
     end
     if not BadAzsPriestDB.disc then
-        BadAzsPriestDB.disc = { FlashHealBelow = 20, GreaterHealBelow = 45, RenewBelow = 90, UseShield = true, Buff = "Power Word: Shield", BuffIndex = 4, MinRank = 1, MaxRank = 0 }
+        BadAzsPriestDB.disc = { FlashHealBelow = 20, GreaterHealBelow = 45, RenewBelow = 90, UseShield = true, MonitorFortitude = true, MonitorSpirit = true, MonitorShadowProt = false, MinRank = 1, MaxRank = 0 }
     end
     if not BadAzsPriestDB.shadow then
-        BadAzsPriestDB.shadow = { FlashHealBelow = 35, GreaterHealBelow = 60, RenewBelow = 90, UseShield = false, Buff = "Power Word: Fortitude", BuffIndex = 1, MinRank = 1, MaxRank = 0 }
+        BadAzsPriestDB.shadow = { FlashHealBelow = 35, GreaterHealBelow = 60, RenewBelow = 90, UseShield = false, MonitorFortitude = true, MonitorSpirit = true, MonitorShadowProt = false, MinRank = 1, MaxRank = 0 }
     end
 
-    -- Migracao: perfis salvos antes do motor de rank existir nao tem esses campos
+    -- Migracao: perfis salvos antes do motor de rank / checklist de buff existir
     local _, specKey
     for _, specKey in ipairs({ "holy", "disc", "shadow" }) do
         if not BadAzsPriestDB[specKey].MinRank then BadAzsPriestDB[specKey].MinRank = 1 end
         if not BadAzsPriestDB[specKey].MaxRank then BadAzsPriestDB[specKey].MaxRank = 0 end
+        if BadAzsPriestDB[specKey].MonitorFortitude == nil then BadAzsPriestDB[specKey].MonitorFortitude = true end
+        if BadAzsPriestDB[specKey].MonitorSpirit == nil then BadAzsPriestDB[specKey].MonitorSpirit = true end
+        if BadAzsPriestDB[specKey].MonitorShadowProt == nil then BadAzsPriestDB[specKey].MonitorShadowProt = false end
+        -- Campos antigos do sistema de ciclo de buff (agora substituido pela checklist)
+        BadAzsPriestDB[specKey].Buff = nil
+        BadAzsPriestDB[specKey].BuffIndex = nil
     end
 
     DEFAULT_CHAT_FRAME:AddMessage(BadAzsPriestVersion .. " " .. BadAzsP_L[BadAzsPriestDB.Locale].loaded)
@@ -241,15 +253,15 @@ function BadAzsP_DetectSpec()
     return best
 end
 
-local BuffList = { "Power Word: Fortitude", "Divine Spirit", "Shadow Protection", "Power Word: Shield" }
-
-function BadAzsP_CycleBuff(spec)
-    local profile = BadAzsPriestDB[spec]
-    profile.BuffIndex = (profile.BuffIndex or 0) + 1
-    if profile.BuffIndex > table.getn(BuffList) then profile.BuffIndex = 1 end
-    profile.Buff = BuffList[profile.BuffIndex]
-    if BadAzsP_RefreshPanels then BadAzsP_RefreshPanels() end
-end
+-- Checklist de buffs monitorados no /bapbuff - cada um tem seu proprio
+-- checkbox no painel (flag = campo booleano no perfil da spec ativa).
+-- Shield entra na mesma checklist mas com a regra especial de Rage/CTRL.
+local BadAzsP_BuffChecklist = {
+    { name = "Power Word: Fortitude", flag = "MonitorFortitude" },
+    { name = "Divine Spirit", flag = "MonitorSpirit" },
+    { name = "Shadow Protection", flag = "MonitorShadowProt" },
+    { name = "Power Word: Shield", flag = "UseShield", rageGated = true },
+}
 
 -- ==========================================================
 -- SMART HEAL
@@ -459,29 +471,27 @@ function BadAzsP_SmartBuff(useRaid)
         end
     end
 
-    -- 2) Shield: quem nao tem, pulando quem usa Rage a menos que CTRL
-    if profile.UseShield then
-        for i = 1, table.getn(units) do
-            local u = units[i]
-            if UnitExists(u) and not UnitIsDead(u) then
-                local hasShield = BadAzsP_UnitHasBuffNamed(u, "Power Word: Shield")
-                local weakened = BadAzsP_UnitHasDebuffNamed(u, "Weakened Soul")
-                local skipRage = BadAzsP_UnitHasRage(u) and not IsControlKeyDown()
-                if not hasShield and not weakened and not skipRage then
-                    BadAzsP_CastOn(u, "Power Word: Shield", true)
-                    return
+    -- 2) Checklist de buffs: pra cada buff habilitado (nessa ordem), acha o
+    -- primeiro do grupo que ainda nao tem e aplica. Shield tem a regra extra
+    -- de Rage/CTRL - pra quem usa Rage, so aplica com CTRL segurado.
+    local b
+    for b = 1, table.getn(BadAzsP_BuffChecklist) do
+        local entry = BadAzsP_BuffChecklist[b]
+        if profile[entry.flag] then
+            for i = 1, table.getn(units) do
+                local u = units[i]
+                if UnitExists(u) and not UnitIsDead(u) then
+                    local needsIt = not BadAzsP_UnitHasBuffNamed(u, entry.name)
+                    if entry.rageGated then
+                        local weakened = BadAzsP_UnitHasDebuffNamed(u, "Weakened Soul")
+                        local skipRage = BadAzsP_UnitHasRage(u) and not IsControlKeyDown()
+                        needsIt = needsIt and not weakened and not skipRage
+                    end
+                    if needsIt then
+                        BadAzsP_CastOn(u, entry.name, true)
+                        return
+                    end
                 end
-            end
-        end
-    end
-
-    -- 3) Buff: quem nao tem o buff configurado no perfil ativo
-    for i = 1, table.getn(units) do
-        local u = units[i]
-        if UnitExists(u) and not UnitIsDead(u) then
-            if not BadAzsP_UnitHasBuffNamed(u, profile.Buff) then
-                BadAzsP_CastOn(u, profile.Buff, true)
-                return
             end
         end
     end
@@ -507,9 +517,15 @@ function BadAzsP_RefreshPanels()
 end
 
 local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
+    -- Lua 5.0 tem limite de 32 upvalues por funcao. Com tantos widgets, o
+    -- Refresh() abaixo estourava esse limite referenciando cada um como
+    -- variavel local separada. Solucao padrao: guardar tudo numa tabela so
+    -- (w), que conta como UM upvalue so, nao importa quantos campos tenha.
+    local w = {}
+
     local Panel = CreateFrame("Frame", "BadAzsPriest_Panel_"..specKey, UIParent)
     Panel:SetWidth(620)
-    Panel:SetHeight(650)
+    Panel:SetHeight(690)
     Panel:SetPoint("CENTER", 0, 0)
     Panel:SetMovable(true)
     Panel:EnableMouse(true)
@@ -521,7 +537,7 @@ local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
 
     local LeftPage = CreateFrame("Frame", nil, Panel)
     LeftPage:SetWidth(300)
-    LeftPage:SetHeight(430)
+    LeftPage:SetHeight(470)
     LeftPage:SetPoint("TOPLEFT", Panel, "TOPLEFT", 0, -60)
     LeftPage:SetBackdrop({
         bgFile = "Interface/DialogFrame/UI-DialogBox-Background",
@@ -532,7 +548,7 @@ local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
 
     local RightPage = CreateFrame("Frame", nil, Panel)
     RightPage:SetWidth(300)
-    RightPage:SetHeight(430)
+    RightPage:SetHeight(470)
     RightPage:SetPoint("TOPLEFT", Panel, "TOPLEFT", 320, -60)
     RightPage:SetBackdrop({
         bgFile = "Interface/DialogFrame/UI-DialogBox-Background",
@@ -541,219 +557,248 @@ local function BadAzsP_CreatePanel(specKey, accentColor, specNameField)
         insets = { left = 11, right = 12, top = 12, bottom = 11 }
     })
 
-    local title = Panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOP", 0, -16)
+    w.title = Panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    w.title:SetPoint("TOP", 0, -16)
 
     local closeBtn = CreateFrame("Button", nil, Panel, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", -4, -4)
 
-    local langBtn = CreateFrame("Button", nil, Panel, "UIPanelButtonTemplate")
-    langBtn:SetPoint("TOPLEFT", 8, -10)
-    langBtn:SetWidth(44); langBtn:SetHeight(20)
+    w.langBtn = CreateFrame("Button", nil, Panel, "UIPanelButtonTemplate")
+    w.langBtn:SetPoint("TOPLEFT", 8, -10)
+    w.langBtn:SetWidth(44); w.langBtn:SetHeight(20)
 
-    local specLabel = Panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    specLabel:SetPoint("TOP", 0, -40)
+    w.specLabel = Panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    w.specLabel:SetPoint("TOP", 0, -40)
 
     -- ---- ESQUERDA: CONTROLES ----
-    local flashSlider = CreateFrame("Slider", "BadAzsP_"..specKey.."_FlashSlider", LeftPage, "OptionsSliderTemplate")
-    flashSlider:SetPoint("TOP", 0, -20)
-    flashSlider:SetWidth(240)
-    flashSlider:SetMinMaxValues(0, 100)
-    flashSlider:SetValueStep(5)
-    getglobal(flashSlider:GetName().."Low"):SetText("0")
-    getglobal(flashSlider:GetName().."High"):SetText("100")
-    flashSlider:SetScript("OnValueChanged", function()
+    w.flashSlider = CreateFrame("Slider", "BadAzsP_"..specKey.."_FlashSlider", LeftPage, "OptionsSliderTemplate")
+    w.flashSlider:SetPoint("TOP", 0, -20)
+    w.flashSlider:SetWidth(240)
+    w.flashSlider:SetMinMaxValues(0, 100)
+    w.flashSlider:SetValueStep(5)
+    getglobal(w.flashSlider:GetName().."Low"):SetText("0")
+    getglobal(w.flashSlider:GetName().."High"):SetText("100")
+    w.flashSlider:SetScript("OnValueChanged", function()
         BadAzsPriestDB[specKey].FlashHealBelow = this:GetValue()
         getglobal(this:GetName().."Text"):SetText(BadAzsP_L[BadAzsPriestDB.Locale].flashLabel .. ": " .. this:GetValue())
     end)
 
-    local greaterSlider = CreateFrame("Slider", "BadAzsP_"..specKey.."_GreaterSlider", LeftPage, "OptionsSliderTemplate")
-    greaterSlider:SetPoint("TOP", 0, -70)
-    greaterSlider:SetWidth(240)
-    greaterSlider:SetMinMaxValues(0, 100)
-    greaterSlider:SetValueStep(5)
-    getglobal(greaterSlider:GetName().."Low"):SetText("0")
-    getglobal(greaterSlider:GetName().."High"):SetText("100")
-    greaterSlider:SetScript("OnValueChanged", function()
+    w.greaterSlider = CreateFrame("Slider", "BadAzsP_"..specKey.."_GreaterSlider", LeftPage, "OptionsSliderTemplate")
+    w.greaterSlider:SetPoint("TOP", 0, -70)
+    w.greaterSlider:SetWidth(240)
+    w.greaterSlider:SetMinMaxValues(0, 100)
+    w.greaterSlider:SetValueStep(5)
+    getglobal(w.greaterSlider:GetName().."Low"):SetText("0")
+    getglobal(w.greaterSlider:GetName().."High"):SetText("100")
+    w.greaterSlider:SetScript("OnValueChanged", function()
         BadAzsPriestDB[specKey].GreaterHealBelow = this:GetValue()
         getglobal(this:GetName().."Text"):SetText(BadAzsP_L[BadAzsPriestDB.Locale].greaterLabel .. ": " .. this:GetValue())
     end)
 
-    local renewSlider = CreateFrame("Slider", "BadAzsP_"..specKey.."_RenewSlider", LeftPage, "OptionsSliderTemplate")
-    renewSlider:SetPoint("TOP", 0, -120)
-    renewSlider:SetWidth(240)
-    renewSlider:SetMinMaxValues(0, 100)
-    renewSlider:SetValueStep(5)
-    getglobal(renewSlider:GetName().."Low"):SetText("0")
-    getglobal(renewSlider:GetName().."High"):SetText("100")
-    renewSlider:SetScript("OnValueChanged", function()
+    w.renewSlider = CreateFrame("Slider", "BadAzsP_"..specKey.."_RenewSlider", LeftPage, "OptionsSliderTemplate")
+    w.renewSlider:SetPoint("TOP", 0, -120)
+    w.renewSlider:SetWidth(240)
+    w.renewSlider:SetMinMaxValues(0, 100)
+    w.renewSlider:SetValueStep(5)
+    getglobal(w.renewSlider:GetName().."Low"):SetText("0")
+    getglobal(w.renewSlider:GetName().."High"):SetText("100")
+    w.renewSlider:SetScript("OnValueChanged", function()
         BadAzsPriestDB[specKey].RenewBelow = this:GetValue()
         getglobal(this:GetName().."Text"):SetText(BadAzsP_L[BadAzsPriestDB.Locale].renewLabel .. ": " .. this:GetValue())
     end)
 
-    local shieldCheck = CreateFrame("CheckButton", "BadAzsP_"..specKey.."_ShieldCheck", LeftPage, "UICheckButtonTemplate")
-    shieldCheck:SetPoint("TOPLEFT", 20, -170)
-    getglobal(shieldCheck:GetName().."Text"):SetText("")
-    local shieldLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    shieldLabel:SetPoint("LEFT", shieldCheck, "RIGHT", 4, 0)
-    shieldLabel:SetJustifyH("LEFT")
-    shieldLabel:SetWidth(200)
-    shieldCheck:SetScript("OnClick", function()
+    w.shieldCheck = CreateFrame("CheckButton", "BadAzsP_"..specKey.."_ShieldCheck", LeftPage, "UICheckButtonTemplate")
+    w.shieldCheck:SetPoint("TOPLEFT", 20, -170)
+    getglobal(w.shieldCheck:GetName().."Text"):SetText("")
+    w.shieldLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.shieldLabel:SetPoint("LEFT", w.shieldCheck, "RIGHT", 4, 0)
+    w.shieldLabel:SetJustifyH("LEFT")
+    w.shieldLabel:SetWidth(200)
+    w.shieldCheck:SetScript("OnClick", function()
         BadAzsPriestDB[specKey].UseShield = (this:GetChecked() == 1)
     end)
 
-    local buffBtn = CreateFrame("Button", nil, LeftPage, "UIPanelButtonTemplate")
-    buffBtn:SetPoint("TOP", 0, -218)
-    buffBtn:SetWidth(240); buffBtn:SetHeight(22)
-    buffBtn:SetScript("OnClick", function()
-        BadAzsP_CycleBuff(specKey)
+    w.fortCheck = CreateFrame("CheckButton", "BadAzsP_"..specKey.."_FortCheck", LeftPage, "UICheckButtonTemplate")
+    w.fortCheck:SetPoint("TOPLEFT", 20, -196)
+    getglobal(w.fortCheck:GetName().."Text"):SetText("")
+    w.fortLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.fortLabel:SetPoint("LEFT", w.fortCheck, "RIGHT", 4, 0)
+    w.fortLabel:SetJustifyH("LEFT"); w.fortLabel:SetWidth(200)
+    w.fortCheck:SetScript("OnClick", function()
+        BadAzsPriestDB[specKey].MonitorFortitude = (this:GetChecked() == 1)
     end)
-    local buffLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    buffLabel:SetPoint("BOTTOM", buffBtn, "TOP", 0, 4)
 
-    local minRankSlider = CreateFrame("Slider", "BadAzsP_"..specKey.."_MinRankSlider", LeftPage, "OptionsSliderTemplate")
-    minRankSlider:SetPoint("TOP", 0, -250)
-    minRankSlider:SetWidth(240)
-    minRankSlider:SetMinMaxValues(1, 10)
-    minRankSlider:SetValueStep(1)
-    getglobal(minRankSlider:GetName().."Low"):SetText("1")
-    getglobal(minRankSlider:GetName().."High"):SetText("10")
-    minRankSlider:SetScript("OnValueChanged", function()
+    w.spiritCheck = CreateFrame("CheckButton", "BadAzsP_"..specKey.."_SpiritCheck", LeftPage, "UICheckButtonTemplate")
+    w.spiritCheck:SetPoint("TOPLEFT", 20, -220)
+    getglobal(w.spiritCheck:GetName().."Text"):SetText("")
+    w.spiritLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.spiritLabel:SetPoint("LEFT", w.spiritCheck, "RIGHT", 4, 0)
+    w.spiritLabel:SetJustifyH("LEFT"); w.spiritLabel:SetWidth(200)
+    w.spiritCheck:SetScript("OnClick", function()
+        BadAzsPriestDB[specKey].MonitorSpirit = (this:GetChecked() == 1)
+    end)
+
+    w.shadowProtCheck = CreateFrame("CheckButton", "BadAzsP_"..specKey.."_ShadowProtCheck", LeftPage, "UICheckButtonTemplate")
+    w.shadowProtCheck:SetPoint("TOPLEFT", 20, -244)
+    getglobal(w.shadowProtCheck:GetName().."Text"):SetText("")
+    w.shadowProtLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.shadowProtLabel:SetPoint("LEFT", w.shadowProtCheck, "RIGHT", 4, 0)
+    w.shadowProtLabel:SetJustifyH("LEFT"); w.shadowProtLabel:SetWidth(200)
+    w.shadowProtCheck:SetScript("OnClick", function()
+        BadAzsPriestDB[specKey].MonitorShadowProt = (this:GetChecked() == 1)
+    end)
+
+    w.buffChecklistHeader = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    w.buffChecklistHeader:SetPoint("BOTTOM", w.fortCheck, "TOP", 90, 6)
+
+    w.minRankSlider = CreateFrame("Slider", "BadAzsP_"..specKey.."_MinRankSlider", LeftPage, "OptionsSliderTemplate")
+    w.minRankSlider:SetPoint("TOP", 0, -280)
+    w.minRankSlider:SetWidth(240)
+    w.minRankSlider:SetMinMaxValues(1, 10)
+    w.minRankSlider:SetValueStep(1)
+    getglobal(w.minRankSlider:GetName().."Low"):SetText("1")
+    getglobal(w.minRankSlider:GetName().."High"):SetText("10")
+    w.minRankSlider:SetScript("OnValueChanged", function()
         BadAzsPriestDB[specKey].MinRank = this:GetValue()
         getglobal(this:GetName().."Text"):SetText(BadAzsP_L[BadAzsPriestDB.Locale].minRankLabel .. ": " .. this:GetValue())
     end)
 
-    local maxRankSlider = CreateFrame("Slider", "BadAzsP_"..specKey.."_MaxRankSlider", LeftPage, "OptionsSliderTemplate")
-    maxRankSlider:SetPoint("TOP", 0, -294)
-    maxRankSlider:SetWidth(240)
-    maxRankSlider:SetMinMaxValues(0, 10)
-    maxRankSlider:SetValueStep(1)
-    getglobal(maxRankSlider:GetName().."Low"):SetText("0")
-    getglobal(maxRankSlider:GetName().."High"):SetText("10")
-    maxRankSlider:SetScript("OnValueChanged", function()
+    w.maxRankSlider = CreateFrame("Slider", "BadAzsP_"..specKey.."_MaxRankSlider", LeftPage, "OptionsSliderTemplate")
+    w.maxRankSlider:SetPoint("TOP", 0, -334)
+    w.maxRankSlider:SetWidth(240)
+    w.maxRankSlider:SetMinMaxValues(0, 10)
+    w.maxRankSlider:SetValueStep(1)
+    getglobal(w.maxRankSlider:GetName().."Low"):SetText("0")
+    getglobal(w.maxRankSlider:GetName().."High"):SetText("10")
+    w.maxRankSlider:SetScript("OnValueChanged", function()
         BadAzsPriestDB[specKey].MaxRank = this:GetValue()
         getglobal(this:GetName().."Text"):SetText(BadAzsP_L[BadAzsPriestDB.Locale].maxRankLabel .. ": " .. this:GetValue())
     end)
 
-    local healBonusLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    healBonusLabel:SetPoint("TOP", 0, -330)
+    w.healBonusLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.healBonusLabel:SetPoint("TOP", 0, -370)
 
-    local blacklistLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    blacklistLabel:SetPoint("TOP", 0, -354)
-    blacklistLabel:SetWidth(260)
+    w.blacklistLabel = LeftPage:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    w.blacklistLabel:SetPoint("TOP", 0, -394)
+    w.blacklistLabel:SetWidth(260)
 
-    local blacklistBox = CreateFrame("EditBox", "BadAzsP_"..specKey.."_BlacklistBox", LeftPage, "InputBoxTemplate")
-    blacklistBox:SetPoint("TOP", 0, -378)
-    blacklistBox:SetWidth(220)
-    blacklistBox:SetHeight(20)
-    blacklistBox:SetAutoFocus(false)
-    blacklistBox:SetScript("OnEnterPressed", function()
+    w.blacklistBox = CreateFrame("EditBox", "BadAzsP_"..specKey.."_BlacklistBox", LeftPage, "InputBoxTemplate")
+    w.blacklistBox:SetPoint("TOP", 0, -418)
+    w.blacklistBox:SetWidth(220)
+    w.blacklistBox:SetHeight(20)
+    w.blacklistBox:SetAutoFocus(false)
+    w.blacklistBox:SetScript("OnEnterPressed", function()
         BadAzsPriestDB.DispelBlacklist = BadAzsP_SplitList(this:GetText())
         this:ClearFocus()
         BadAzsP_RefreshPanels()
     end)
-    blacklistBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)
+    w.blacklistBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)
 
     -- ---- DIREITA: EXPLICACOES ----
-    local explainFlash = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    explainFlash:SetPoint("TOP", 0, -14)
-    explainFlash:SetWidth(260); explainFlash:SetJustifyH("LEFT"); explainFlash:SetSpacing(2)
+    w.explainFlash = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.explainFlash:SetPoint("TOP", 0, -14)
+    w.explainFlash:SetWidth(260); w.explainFlash:SetJustifyH("LEFT"); w.explainFlash:SetSpacing(2)
 
-    local explainGreater = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    explainGreater:SetPoint("TOP", 0, -70)
-    explainGreater:SetWidth(260); explainGreater:SetJustifyH("LEFT"); explainGreater:SetSpacing(2)
+    w.explainGreater = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.explainGreater:SetPoint("TOP", 0, -70)
+    w.explainGreater:SetWidth(260); w.explainGreater:SetJustifyH("LEFT"); w.explainGreater:SetSpacing(2)
 
-    local explainRenew = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    explainRenew:SetPoint("TOP", 0, -130)
-    explainRenew:SetWidth(260); explainRenew:SetJustifyH("LEFT"); explainRenew:SetSpacing(2)
+    w.explainRenew = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.explainRenew:SetPoint("TOP", 0, -130)
+    w.explainRenew:SetWidth(260); w.explainRenew:SetJustifyH("LEFT"); w.explainRenew:SetSpacing(2)
 
-    local explainShield = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    explainShield:SetPoint("TOP", 0, -186)
-    explainShield:SetWidth(260); explainShield:SetJustifyH("LEFT"); explainShield:SetSpacing(2)
+    w.explainShield = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.explainShield:SetPoint("TOP", 0, -186)
+    w.explainShield:SetWidth(260); w.explainShield:SetJustifyH("LEFT"); w.explainShield:SetSpacing(2)
 
-    local explainBuff = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    explainBuff:SetPoint("TOP", 0, -234)
-    explainBuff:SetWidth(260); explainBuff:SetJustifyH("LEFT"); explainBuff:SetSpacing(2)
+    w.explainBuff = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.explainBuff:SetPoint("TOP", 0, -234)
+    w.explainBuff:SetWidth(260); w.explainBuff:SetJustifyH("LEFT"); w.explainBuff:SetSpacing(2)
 
-    local explainDownrank = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    explainDownrank:SetPoint("TOP", 0, -278)
-    explainDownrank:SetWidth(260); explainDownrank:SetJustifyH("LEFT"); explainDownrank:SetSpacing(2)
+    w.explainDownrank = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.explainDownrank:SetPoint("TOP", 0, -320)
+    w.explainDownrank:SetWidth(260); w.explainDownrank:SetJustifyH("LEFT"); w.explainDownrank:SetSpacing(2)
 
-    local explainBlacklist = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    explainBlacklist:SetPoint("TOP", 0, -340)
-    explainBlacklist:SetWidth(260); explainBlacklist:SetJustifyH("LEFT"); explainBlacklist:SetSpacing(2)
+    w.explainBlacklist = RightPage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.explainBlacklist:SetPoint("TOP", 0, -390)
+    w.explainBlacklist:SetWidth(260); w.explainBlacklist:SetJustifyH("LEFT"); w.explainBlacklist:SetSpacing(2)
 
     -- ---- RODAPE: COMANDOS ----
     local divider = Panel:CreateTexture(nil, "ARTWORK")
-    divider:SetPoint("TOP", 0, -478)
+    divider:SetPoint("TOP", 0, -518)
     divider:SetWidth(590); divider:SetHeight(1)
     divider:SetTexture(0.5, 0.5, 0.5, 0.5)
 
-    local cmdHeader = Panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cmdHeader:SetPoint("TOP", 0, -490)
+    w.cmdHeader = Panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    w.cmdHeader:SetPoint("TOP", 0, -530)
 
-    local cmdText = Panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    cmdText:SetPoint("TOP", 0, -510)
-    cmdText:SetWidth(560)
-    cmdText:SetJustifyH("LEFT")
-    cmdText:SetSpacing(3)
+    w.cmdText = Panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    w.cmdText:SetPoint("TOP", 0, -550)
+    w.cmdText:SetWidth(560)
+    w.cmdText:SetJustifyH("LEFT")
+    w.cmdText:SetSpacing(3)
 
     local function Refresh()
         local L = BadAzsP_L[BadAzsPriestDB.Locale]
         local profile = BadAzsPriestDB[specKey]
 
-        title:SetText("|cffffffff" .. L.title .. "|r" .. accentColor .. " - " .. L[specNameField] .. "|r")
-        langBtn:SetText(BadAzsPriestDB.Locale)
+        w.title:SetText("|cffffffff" .. L.title .. "|r" .. accentColor .. " - " .. L[specNameField] .. "|r")
+        w.langBtn:SetText(BadAzsPriestDB.Locale)
 
         local detected = BadAzsP_DetectSpec()
         local detectedName = L.specHoly
         if detected == "disc" then detectedName = L.specDisc
         elseif detected == "shadow" then detectedName = L.specShadow end
-        specLabel:SetText(L.specDetected .. accentColor .. detectedName .. "|r")
+        w.specLabel:SetText(L.specDetected .. accentColor .. detectedName .. "|r")
 
-        flashSlider:SetValue(profile.FlashHealBelow)
-        greaterSlider:SetValue(profile.GreaterHealBelow)
-        renewSlider:SetValue(profile.RenewBelow)
-        getglobal(flashSlider:GetName().."Text"):SetText(L.flashLabel .. ": " .. profile.FlashHealBelow)
-        getglobal(greaterSlider:GetName().."Text"):SetText(L.greaterLabel .. ": " .. profile.GreaterHealBelow)
-        getglobal(renewSlider:GetName().."Text"):SetText(L.renewLabel .. ": " .. profile.RenewBelow)
+        w.flashSlider:SetValue(profile.FlashHealBelow)
+        w.greaterSlider:SetValue(profile.GreaterHealBelow)
+        w.renewSlider:SetValue(profile.RenewBelow)
+        getglobal(w.flashSlider:GetName().."Text"):SetText(L.flashLabel .. ": " .. profile.FlashHealBelow)
+        getglobal(w.greaterSlider:GetName().."Text"):SetText(L.greaterLabel .. ": " .. profile.GreaterHealBelow)
+        getglobal(w.renewSlider:GetName().."Text"):SetText(L.renewLabel .. ": " .. profile.RenewBelow)
 
-        if profile.UseShield then shieldCheck:SetChecked(1) else shieldCheck:SetChecked(nil) end
-        shieldLabel:SetText(L.shieldLabel)
+        if profile.UseShield then w.shieldCheck:SetChecked(1) else w.shieldCheck:SetChecked(nil) end
+        w.shieldLabel:SetText(L.shieldLabel)
 
-        buffLabel:SetText("|cffffd200" .. L.buffLabel .. "|r")
-        buffBtn:SetText(profile.Buff)
+        w.buffChecklistHeader:SetText("|cffffd200" .. L.buffLabel .. "|r")
+        w.fortLabel:SetText(L.fortLabel)
+        w.spiritLabel:SetText(L.spiritLabel)
+        w.shadowProtLabel:SetText(L.shadowProtLabel)
+        if profile.MonitorFortitude then w.fortCheck:SetChecked(1) else w.fortCheck:SetChecked(nil) end
+        if profile.MonitorSpirit then w.spiritCheck:SetChecked(1) else w.spiritCheck:SetChecked(nil) end
+        if profile.MonitorShadowProt then w.shadowProtCheck:SetChecked(1) else w.shadowProtCheck:SetChecked(nil) end
 
-        minRankSlider:SetValue(profile.MinRank or 1)
-        maxRankSlider:SetValue(profile.MaxRank or 0)
-        getglobal(minRankSlider:GetName().."Text"):SetText(L.minRankLabel .. ": " .. (profile.MinRank or 1))
-        getglobal(maxRankSlider:GetName().."Text"):SetText(L.maxRankLabel .. ": " .. (profile.MaxRank or 0))
+        w.minRankSlider:SetValue(profile.MinRank or 1)
+        w.maxRankSlider:SetValue(profile.MaxRank or 0)
+        getglobal(w.minRankSlider:GetName().."Text"):SetText(L.minRankLabel .. ": " .. (profile.MinRank or 1))
+        getglobal(w.maxRankSlider:GetName().."Text"):SetText(L.maxRankLabel .. ": " .. (profile.MaxRank or 0))
 
-        healBonusLabel:SetText(L.healBonusLabel .. ": +" .. BadAzsP_GetHealingBonus())
+        w.healBonusLabel:SetText(L.healBonusLabel .. ": +" .. BadAzsP_GetHealingBonus())
 
-        blacklistLabel:SetText("|cffffd200" .. L.blacklistLabel .. "|r")
-        blacklistBox:SetText(BadAzsP_JoinList(BadAzsPriestDB.DispelBlacklist or {}))
+        w.blacklistLabel:SetText("|cffffd200" .. L.blacklistLabel .. "|r")
+        w.blacklistBox:SetText(BadAzsP_JoinList(BadAzsPriestDB.DispelBlacklist or {}))
 
-        explainFlash:SetText(L.explainFlash)
-        explainGreater:SetText(L.explainGreater)
-        explainRenew:SetText(L.explainRenew)
-        explainShield:SetText(L.explainShield)
-        explainBuff:SetText(L.explainBuff)
-        explainDownrank:SetText(L.explainDownrank)
-        explainBlacklist:SetText(L.explainBlacklist)
+        w.explainFlash:SetText(L.explainFlash)
+        w.explainGreater:SetText(L.explainGreater)
+        w.explainRenew:SetText(L.explainRenew)
+        w.explainShield:SetText(L.explainShield)
+        w.explainBuff:SetText(L.explainBuff)
+        w.explainDownrank:SetText(L.explainDownrank)
+        w.explainBlacklist:SetText(L.explainBlacklist)
 
-        cmdHeader:SetText("|cffffd200" .. L.cmdHeader .. "|r")
+        w.cmdHeader:SetText("|cffffd200" .. L.cmdHeader .. "|r")
         local lines = ""
         local i
         for i = 1, table.getn(L.cmdList) do
             if i > 1 then lines = lines .. "\n" end
             lines = lines .. L.cmdList[i]
         end
-        cmdText:SetText(lines)
+        w.cmdText:SetText(lines)
     end
 
-    langBtn:SetScript("OnClick", function()
-        if BadAzsPriestDB.Locale == "EN" then BadAzsPriestDB.Locale = "PT" else BadAzsPriestDB.Locale = "EN" end
+    w.langBtn:SetScript("OnClick", function()
+        if BadAzsPriestDB.Locale == "EN" then BadAzsPriestDB.Locale = "BR" else BadAzsPriestDB.Locale = "EN" end
         BadAzsP_RefreshPanels()
     end)
 
